@@ -8,41 +8,81 @@ from config import LIVE_TRADING
 logging.basicConfig(level=logging.INFO)
 
 SYMBOL = "BTC/USDT"
-TRADE_SIZE = 0.001
 
-def place_trade(signal):
+def place_trade(signal, price):
     if not LIVE_TRADING:
-        logging.info(f"[PAPER TRADE] {signal}")
-        return
+        logging.info(f"[PAPER TRADE] {signal} @ {price}")
+        return None
 
     try:
         if signal == "BUY":
-            exchange.create_market_buy_order(SYMBOL, TRADE_SIZE)
-        elif signal == "SELL":
-            exchange.create_market_sell_order(SYMBOL, TRADE_SIZE)
+            exchange.create_order(
+                SYMBOL,
+                "market",
+                "buy",
+                None,
+                None,
+                {"cost": 5}
+            )
 
-        logging.info(f"Executed {signal}")
+            entry_price = price
+            take_profit = entry_price * 1.02
+            stop_loss = entry_price * 0.99
+
+            logging.info(f"BUY at {entry_price}")
+            logging.info(f"TP: {take_profit}, SL: {stop_loss}")
+
+            return entry_price, take_profit, stop_loss
+
+        elif signal == "SELL":
+            exchange.create_market_sell_order(SYMBOL, 0.0005)
+            logging.info("Manual SELL executed")
 
     except Exception as e:
         logging.error(f"Trade error: {e}")
+        return None
+
 
 def run_bot():
     logging.info("Bot started")
 
+    in_trade = False
+    entry_price = 0
+    take_profit = 0
+    stop_loss = 0
+
     while True:
         try:
             df = get_ohlcv(SYMBOL)
-            signal = get_signal(df)
+            price = df['close'].iloc[-1]
 
-            if signal:
-                logging.info(f"Signal: {signal}")
-                place_trade(signal)
+            if not in_trade:
+                signal = get_signal(df)
 
-            time.sleep(30)
+                if signal == "BUY":
+                    result = place_trade(signal, price)
+
+                    if result:
+                        entry_price, take_profit, stop_loss = result
+                        in_trade = True
+
+            else:
+                if price >= take_profit:
+                    exchange.create_market_sell_order(SYMBOL, 0.0005)
+                    logging.info("Take Profit HIT")
+                    in_trade = False
+
+                elif price <= stop_loss:
+                    exchange.create_market_sell_order(SYMBOL, 0.0005)
+                    logging.info("Stop Loss HIT")
+                    in_trade = False
+
+            time.sleep(20)
 
         except Exception as e:
-            logging.error(f"Main error: {e}")
+            logging.error(f"Error: {e}")
             time.sleep(5)
+
 
 if __name__ == "__main__":
     run_bot()
