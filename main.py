@@ -35,9 +35,14 @@ def place_trade(signal, price):
             return entry_price, take_profit, stop_loss
 
         elif signal == "SELL":
-            exchange.create_market_sell_order(SYMBOL, 0.0005)
-            logging.info("Manual SELL executed")
+    balance = exchange.fetch_balance()
+    btc_amount = balance['BTC']['free']
 
+    if btc_amount and btc_amount > 0.00001:
+        exchange.create_market_sell_order(SYMBOL, btc_amount)
+        logging.info(f"Sold {btc_amount} BTC")
+    else:
+        logging.info("No BTC to sell")
     except Exception as e:
         logging.error(f"Trade error: {e}")
         return None
